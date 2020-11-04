@@ -14,7 +14,7 @@
       </FileInput>
       <span class="spacer"></span>
       <button class="btn" @click="play" :disabled="!canPlay">
-        {{ isPlaying ? "⏸" : "▶" }}
+        {{ playState === "playing" ? "⏸" : "▶" }}
       </button>
       <button class="btn" @click="reset">Reset</button>
     </div>
@@ -24,11 +24,10 @@
     />
     <Visualizer
       :file="file"
-      :isPlaying="isPlaying"
-      :isPaused="isPaused"
+      :playState="playState"
       :settings="settings"
       @readystatechange="setCanPlay"
-      @finished="() => (isPlaying = false)"
+      @finished="() => (playState = 'stopped')"
     />
   </div>
 </template>
@@ -47,22 +46,23 @@ export default {
   },
   data: () => ({
     file: null,
-    isPlaying: false,
-    isPaused: false,
+    playState: "stopped",
     canPlay: false,
     settings: {
       renderOnline: true,
       enableRecording: false,
-      gamma: 2,
+      gamma: 1.5,
       minFreq: 25,
       maxFreq: 15000,
+      minDecibels: -90,
+      maxDecibels: -15,
       fftSize: 8192,
       numBars: 100,
       barWidth: "fit",
       barPadding: 0.25,
       edgePadding: 3,
       idleHeight: 3,
-      colorList: ["#7117EA", "#EA6060"],
+      colorList: ["#7117FF", "#FF6046"],
     },
   }),
   methods: {
@@ -70,17 +70,12 @@ export default {
       this.file = Array.from(ev.target.files)[0];
     },
     play() {
-      // F F -> T F (playing)
-      // T F -> F T (paused)
-      // F T -> T F (playing)
       if (this.canPlay) {
-        this.isPaused = this.isPlaying;
-        this.isPlaying = !this.isPlaying;
+        this.playState = this.playState === "playing" ? "paused" : "playing";
       }
     },
     reset() {
-      this.isPlaying = false;
-      this.isPaused = false;
+      this.playState = "stopped";
     },
     setCanPlay(val) {
       this.canPlay = val;

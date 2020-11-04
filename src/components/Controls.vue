@@ -12,6 +12,10 @@
         <input type="text" v-model="gamma" />
       </div>
       <div>
+        <label>Number of Bars</label>
+        <input type="text" v-model="numBars" />
+      </div>
+      <div>
         <label>Min Frequency</label>
         <input type="text" v-model="minFreq" />
       </div>
@@ -20,8 +24,12 @@
         <input type="text" v-model="maxFreq" />
       </div>
       <div>
-        <label>Number of Bars</label>
-        <input type="text" v-model="numBars" />
+        <label>Min dB</label>
+        <input type="text" v-model="minDecibels" />
+      </div>
+      <div>
+        <label>Max dB</label>
+        <input type="text" v-model="maxDecibels" />
       </div>
       <div>
         <label>In-Between Spacing (0&#x2011;1)</label>
@@ -104,6 +112,8 @@ export default {
     gamma: "",
     minFreq: "",
     maxFreq: "",
+    minDecibels: "",
+    maxDecibels: "",
     fftSize: 8192,
     numBars: "",
     barWidth: "",
@@ -147,6 +157,22 @@ export default {
         .check((x) => !Number.isNaN(x) && x > 0 && x > this.settings.minFreq)
         .then((x) => this.$emit("change", { maxFreq: x }));
     },
+    minDecibels(val) {
+      validator(val)
+        .convert((s) => parseFloat(s, 10))
+        .check(
+          (x) => !Number.isNaN(x) && x < 0 && x < this.settings.maxDecibels
+        )
+        .then((x) => this.$emit("change", { minDecibels: x }));
+    },
+    maxDecibels(val) {
+      validator(val)
+        .convert((s) => parseFloat(s, 10))
+        .check(
+          (x) => !Number.isNaN(x) && x <= 0 && x > this.settings.minDecibels
+        )
+        .then((x) => this.$emit("change", { maxDecibels: x }));
+    },
     numBars(val) {
       validator(val)
         .convert((s) => parseInt(s, 10))
@@ -177,6 +203,8 @@ export default {
       this.gamma = String(this.settings.gamma);
       this.minFreq = String(this.settings.minFreq);
       this.maxFreq = String(this.settings.maxFreq);
+      this.minDecibels = String(this.settings.minDecibels);
+      this.maxDecibels = String(this.settings.maxDecibels);
       this.numBars = String(this.settings.numBars);
       this.barWidth = String(this.settings.barWidth);
       this.barPadding = String(this.settings.barPadding);

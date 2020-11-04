@@ -5,7 +5,10 @@
         v-for="(h, i) in barHeights"
         :key="i"
         :fill="barColors[i]"
-        :transform="`translate(${(i + settings.edgePadding) * barWidth},0)`"
+        :transform="`translate(${(
+          (i + settings.edgePadding) *
+          barWidth
+        ).toFixed(3)},0)`"
         :width="barWidth"
       >
         <rect
@@ -15,18 +18,10 @@
         />
       </g>
     </svg>
-    <button
-      style="position: fixed; top: 92vh; right: 1rem"
-      class="btn"
-      @click="downloadSequence"
-    >
-      Save image sequence
-    </button>
-    <span
-      style="position: fixed; top: calc(46px + 1rem); right: 1rem"
-      v-if="isPlaying && svgs.length"
-    >
-      FPS: {{ (1000 / svgs[svgs.length - 1].took).toFixed(2) }}
+    <span class="indicator" v-if="lastRenders.length">
+      FPS: {{ (1000 / lastRenders[lastRenders.length - 1].took).toFixed(2) }}
+      <br />
+      t = {{ lastRenders[lastRenders.length - 1].audioTimestamp.toFixed(4) }} s
     </span>
   </div>
 </template>
@@ -44,22 +39,31 @@ export default {
     audio: new Audio(),
     context: null,
     splitter: null,
-    analyzerL: null,
-    analyzerR: null,
+    analyserL: null,
+    analyserR: null,
     audioBufferL: null,
     audioBufferR: null,
     weightsCache: new Map(),
-    svgs: [],
+    lastRenders: [],
+    audioStartTime: 0,
   }),
   props: {
-    isPlaying: Boolean,
-    isPaused: Boolean,
+    playState: String,
     file: Object,
     settings: Object,
   },
   computed: {
+    isPlaying() {
+      return this.playState === "playing";
+    },
+    isPaused() {
+      return this.playState === "paused";
+    },
+    isStopped() {
+      return this.playState === "stopped";
+    },
     barHeights() {
-      if (this.isPlaying || this.isPaused) {
+      if (!this.isStopped) {
         return this.spectrum;
       }
       return new Array(this.settings.numBars).fill(this.settings.idleHeight);
@@ -105,7 +109,7 @@ export default {
         );
         const hue = pair[0][0] + alpha * hueDelta;
         const h = (hue + 360) % 360;
-        return `hsl(${h}, ${s.toFixed(3)}%, ${l.toFixed(3)}%)`;
+        return `hsl(${h.toFixed(2)}, ${s.toFixed(3)}%, ${l.toFixed(3)}%)`;
       });
     },
   },
@@ -118,17 +122,21 @@ export default {
       if (!this.context || !this.splitter) {
         return;
       }
-      if (this.analyzerL && this.analyzerR) {
-        this.splitter.disconnect(this.analyzerL);
-        this.splitter.disconnect(this.analyzerR);
+      if (this.analyserL && this.analyserR) {
+        this.splitter.disconnect(this.analyserL);
+        this.splitter.disconnect(this.analyserR);
       }
-      const { fftSize } = this.settings;
+      const { fftSize, minDecibels, maxDecibels } = this.settings;
       this.analyserL = this.context.createAnalyser();
       this.analyserL.fftSize = fftSize;
       this.analyserL.smoothingConstant = 0.5;
+      this.analyserL.minDecibels = minDecibels;
+      this.analyserL.maxDecibels = maxDecibels;
       this.analyserR = this.context.createAnalyser();
       this.analyserR.fftSize = fftSize;
       this.analyserR.smoothingConstant = 0.5;
+      this.analyserR.minDecibels = minDecibels;
+      this.analyserR.maxDecibels = maxDecibels;
       this.splitter.connect(this.analyserL, 0, 0);
       this.splitter.connect(this.analyserR, 1, 0);
 
@@ -162,36 +170,6 @@ export default {
       this.weightsCache.set(key, weights);
       return weights;
     },
-    snapshot() {
-      const mk = (tag, props) => {
-        const el = document.createElement(tag);
-        const { children = [], ...attrs } = props;
-        for (let k in attrs) el.setAttribute(k, String(attrs[k]));
-        children.forEach((c) => el.appendChild(c));
-        return el;
-      };
-      const svg = mk("svg", {
-        width: this.width,
-        height: this.height,
-        children: this.barHeights.map((h, i) =>
-          mk("g", {
-            fill: this.barColors[i],
-            transform: `translate(${
-              (i + this.settings.edgePadding) * this.barWidth
-            },0)`,
-            width: this.barWidth,
-            children: [
-              mk("rect", {
-                y: this.height * 0.9 - Math.max(0, h),
-                width: this.barWidth * (1 - this.settings.barPadding),
-                height: Math.abs(h),
-              }),
-            ],
-          })
-        ),
-      });
-      return svg.outerHTML;
-    },
     calculateBarHeights(ts) {
       if (!this.analyserL || !this.analyserR) {
         this.$emit("readystatechange", false);
@@ -216,69 +194,36 @@ export default {
       });
 
       if (this.isPlaying) {
-        const frame = this.snapshot();
-        const dt = this.svgs.length
-          ? ts - this.svgs[this.svgs.length - 1].timestamp
-          : 1000 / 60;
-        this.svgs.push({
-          index: this.svgs.length,
+        const tail =
+          this.lastRenders.length &&
+          this.lastRenders[this.lastRenders.length - 1];
+        const dt = tail ? ts - tail.timestamp : 1000 / 60;
+        let audioTimestamp =
+          this.context.getOutputTimestamp().contextTime - this.audioStartTime;
+        if (tail && audioTimestamp <= tail.audioTimestamp) {
+          this.audioStartTime -= tail.audioTimestamp;
+          audioTimestamp += tail.audioTimestamp;
+        }
+        this.lastRenders.push({
           timestamp: ts,
+          audioTimestamp,
           took: dt,
-          input: frame,
         });
+        if (this.lastRenders.length >= 36002) {
+          this.lastRenders.splice(0, 36000);
+        }
         requestAnimationFrame((ts) => this.calculateBarHeights(ts));
       }
     },
-    clearSvgs() {
-      this.svgs.splice(0);
-      // this.pngs.clear();
-      // this.workerCounter += 1;
-    },
-    async stringifySequence(startIndex, endIndex) {
-      if (!this.file || !this.svgs.length) {
-        return [];
-      }
-      const end = endIndex !== undefined ? endIndex : this.svgs.length;
-      const start = startIndex !== undefined ? startIndex : 0;
-
-      const span = end - start;
-      if (span > 1000) {
-        const parts = await Promise.all(
-          buildList(10, (i) =>
-            this.stringifySequence(
-              Math.floor(start + (i * span) / 10),
-              Math.floor(start + ((i + 1) * span) / 10)
-            )
-          )
-        );
-        return parts.join("");
-      }
-      return this.svgs
-        .slice(start, end)
-        .map((svg) => svg.input.replace(/\n/g, "") + "\n")
-        .join("");
-    },
-    async downloadSequence() {
-      if (!this.file) {
-        return;
-      }
-      const filename = `spectrum_${this.file.name}.txt`;
-      let ldsvg = await this.stringifySequence();
-      const blob = new Blob([ldsvg]);
-
-      // make and click a temporary link to download the Blob
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      this.$refs.root.appendChild(link);
-      link.click();
-      link.remove();
+    resetIndicatorData() {
+      this.lastRenders = [];
+      this.spectrum.fill(this.settings.idleHeight);
     },
   },
   watch: {
     file(val) {
       this.$emit("readystatechange", false);
-      this.clearSvgs();
+      this.resetIndicatorData();
       if (val && !this.context) {
         this.context = new AudioContext();
         this.splitter = this.context.createChannelSplitter();
@@ -296,24 +241,35 @@ export default {
         reader.readAsDataURL(val);
       }
     },
-    isPlaying(val) {
-      if (val) {
-        if (this.audio.currentTime === 0) {
-          this.clearSvgs();
+    playState(val, prev) {
+      if (val === "playing") {
+        if (prev === "stopped") {
+          this.resetIndicatorData();
         }
+        this.audioStartTime = this.context.getOutputTimestamp().contextTime;
         this.audio.play();
         requestAnimationFrame((ts) => this.calculateBarHeights(ts));
-      }
-    },
-    isPaused(val) {
-      if (val) {
+      } else {
         this.audio.pause();
+        if (val === "stopped") {
+          this.resetIndicatorData();
+        }
       }
     },
     settings: {
       handler(next, prev) {
-        if (next.fftSize !== prev.fftSize) {
-          this.setAnalyzers();
+        if (this.analyserL && this.analyserR) {
+          const analyserProps = [
+            { get: (o) => o.fftSize, set: (o, v) => (o.fftSize = v) },
+            { get: (o) => o.minDecibels, set: (o, v) => (o.minDecibels = v) },
+            { get: (o) => o.maxDecibels, set: (o, v) => (o.maxDecibels = v) },
+          ];
+          analyserProps.forEach((prop) => {
+            if (prop.get(next) !== prop.get(prev)) {
+              prop.set(this.analyserL, prop.get(next));
+              prop.set(this.analyserR, prop.get(next));
+            }
+          });
         }
       },
     },
@@ -346,5 +302,11 @@ export default {
 .viz {
   overflow: hidden;
   height: calc(100vh - 47px);
+}
+.indicator {
+  position: fixed;
+  top: calc(46px + 1rem);
+  right: 30px;
+  text-align: right;
 }
 </style>
