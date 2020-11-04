@@ -1,25 +1,46 @@
 <template>
-  <div>
+  <div id="app">
     <div class="flex navbar">
       <h3 class="headline cursor-default">Audio Spectrum Generator</h3>
       <span class="spacer"></span>
-      <FileInput accept="audio/*" @change="setFile">
+      <FileInput
+        class="flex"
+        style="align-self: stretch"
+        accept="audio/*"
+        @change="setFile"
+      >
         Upload
-        <template v-slot:after>
-          <span v-if="file">
+        <template v-slot:before>
+          <span class="file-input-value" v-if="file">
             {{ file.name }}
           </span>
-          <span v-else class="file-formats">Works with any audio file</span>
+        </template>
+        <template v-slot:after>
+          <button
+            class="btn-flat settings-dropdown"
+            ref="dropBtn"
+            @click="toggleShowSettings"
+          >
+            <unicon name="sliders-v" />
+          </button>
         </template>
       </FileInput>
       <span class="spacer"></span>
       <button class="btn" @click="play" :disabled="!canPlay">
-        {{ playState === "playing" ? "⏸" : "▶" }}
+        <unicon
+          :name="playState === 'playing' ? 'pause' : 'play'"
+          height="16"
+          width="16"
+        />
       </button>
       <button class="btn" @click="reset">Reset</button>
     </div>
     <Controls
+      :show="showSettings"
+      :top="dropdownPosition.top"
+      :left="dropdownPosition.left"
       :settings="settings"
+      @blur="onDropdownBlur"
       @change="(toMerge) => (settings = { ...settings, ...toMerge })"
     />
     <Visualizer
@@ -37,6 +58,8 @@ import "tailwindcss/dist/base.css";
 import FileInput from "./components/FileInput.vue";
 import Controls from "./components/Controls.vue";
 import Visualizer from "./components/Visualizer.vue";
+import eventListenerMixin from "./mixins/eventListenerTracker";
+
 export default {
   name: "App",
   components: {
@@ -44,13 +67,17 @@ export default {
     FileInput,
     Visualizer,
   },
+  mixins: [eventListenerMixin],
   data: () => ({
     file: null,
     playState: "stopped",
     canPlay: false,
+    showSettings: false,
+    dropdownPosition: {
+      top: 46,
+      left: 200,
+    },
     settings: {
-      renderOnline: true,
-      enableRecording: false,
       gamma: 1.5,
       minFreq: 25,
       maxFreq: 15000,
@@ -81,6 +108,37 @@ export default {
       this.canPlay = val;
       if (!val) this.reset();
     },
+    toggleShowSettings() {
+      const next = !this.showSettings;
+      if (next) {
+        const onResize = () => {
+          const dropBtn = this.$refs.dropBtn;
+          const rect = dropBtn.getBoundingClientRect();
+          this.dropdownPosition.top = rect.bottom;
+          this.dropdownPosition.left = rect.left;
+        };
+        onResize();
+        this.addEventListener({
+          target: window,
+          evtName: "resize",
+          listener: onResize,
+        });
+      } else {
+        this.removeMatchingEventListeners(
+          ({ evtName }) => evtName === "resize"
+        );
+      }
+      console.log(next);
+      this.showSettings = next;
+    },
+    onDropdownBlur(ev) {
+      if (!this.$refs.dropBtn.contains(ev.target)) {
+        this.showSettings = false;
+      }
+    },
+  },
+  beforeUnmount() {
+    this.removeAllEventListeners();
   },
 };
 </script>
@@ -99,6 +157,12 @@ export default {
   display: flex;
   align-items: center;
 }
+.justify-center {
+  justify-content: center;
+}
+.flex-col {
+  flex-direction: column;
+}
 .spacer {
   flex-grow: 1;
 }
@@ -109,8 +173,12 @@ export default {
   cursor: default;
 }
 .btn,
-.btn-secondary {
+.btn-secondary,
+.btn-flat {
   min-width: 24px;
+  overflow: hidden;
+  white-space: pre;
+  text-overflow: ellipsis;
   padding: 0.125rem 0.375rem;
   border-radius: 2px;
 }
@@ -142,8 +210,19 @@ export default {
     cursor: not-allowed;
   }
 }
+.btn-flat {
+  &:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  &[disabled] {
+    color: #bbb;
+    cursor: not-allowed;
+  }
+}
 .btn:focus,
 .btn-secondary:focus,
+.btn-flat:focus,
 .btn-none:focus {
   outline: none;
 }
@@ -156,14 +235,29 @@ export default {
   padding: 8px;
   height: 46px;
 
+  .file-input-value,
+  .headline {
+    display: inline-block;
+    white-space: pre;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+
+  .file-input-value {
+    max-width: 25vw;
+    line-height: 1;
+  }
+
   .btn {
     margin-left: 0.25rem;
   }
+
+  .unicon {
+    margin-bottom: -3px;
+  }
 }
-.file-formats {
-  line-height: 1;
-  font-size: 0.8175rem;
-  color: rgb(221, 221, 221);
-  display: inline-block;
+.settings-dropdown {
+  align-self: stretch;
+  margin: -8px 0 -8px;
 }
 </style>

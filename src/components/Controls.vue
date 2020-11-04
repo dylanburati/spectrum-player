@@ -1,66 +1,67 @@
 <template>
-  <div class="settings" :style="showSettings && { opacity: 1 }">
-    <div class="flex settings-cta">
-      <span class="cursor-default">Customize</span>
-      <button class="btn-none" @click="() => (showSettings = !showSettings)">
-        {{ showSettings ? "▲" : "▼" }}
-      </button>
+  <div
+    class="settings grid"
+    ref="root"
+    v-show="show"
+    :style="{
+      top: `${top}px`,
+      left: `${left}px`,
+    }"
+  >
+    <div>
+      <label>Gamma</label>
+      <input type="text" v-model="gamma" />
     </div>
-    <div class="grid" v-if="showSettings">
-      <div>
-        <label>Gamma</label>
-        <input type="text" v-model="gamma" />
-      </div>
-      <div>
-        <label>Number of Bars</label>
-        <input type="text" v-model="numBars" />
-      </div>
-      <div>
-        <label>Min Frequency</label>
-        <input type="text" v-model="minFreq" />
-      </div>
-      <div>
-        <label>Max Frequency</label>
-        <input type="text" v-model="maxFreq" />
-      </div>
-      <div>
-        <label>Min dB</label>
-        <input type="text" v-model="minDecibels" />
-      </div>
-      <div>
-        <label>Max dB</label>
-        <input type="text" v-model="maxDecibels" />
-      </div>
-      <div>
-        <label>In-Between Spacing (0&#x2011;1)</label>
-        <input type="text" v-model="barPadding" />
-      </div>
-      <div>
-        <label>Edge Spacing</label>
-        <input type="text" v-model="edgePadding" />
-      </div>
-      <div>
-        <label>Idle Height (px)</label>
-        <input type="text" v-model="idleHeight" />
-      </div>
-      <div>
-        <label>Gradient Colors</label>
-        <div class="flex">
-          <input
-            v-for="(color, i) in colorList"
-            :key="i"
-            type="color"
-            style="flex-grow: 1"
-            :value="color"
-            @change="(ev) => setColor(i, ev.target.value)"
-          />
-        </div>
+    <div>
+      <label>Number of Bars</label>
+      <input type="text" v-model="numBars" />
+    </div>
+    <div>
+      <label>Min Frequency</label>
+      <input type="text" v-model="minFreq" />
+    </div>
+    <div>
+      <label>Max Frequency</label>
+      <input type="text" v-model="maxFreq" />
+    </div>
+    <div>
+      <label>Min dB</label>
+      <input type="text" v-model="minDecibels" />
+    </div>
+    <div>
+      <label>Max dB</label>
+      <input type="text" v-model="maxDecibels" />
+    </div>
+    <div>
+      <label>In-Between Spacing (0&#x2011;1)</label>
+      <input type="text" v-model="barPadding" />
+    </div>
+    <div>
+      <label>Edge Spacing</label>
+      <input type="text" v-model="edgePadding" />
+    </div>
+    <div>
+      <label>Idle Height (px)</label>
+      <input type="text" v-model="idleHeight" />
+    </div>
+    <div>
+      <label>Gradient Colors</label>
+      <div class="flex">
+        <input
+          v-for="(color, i) in colorList"
+          :key="i"
+          type="color"
+          style="flex-grow: 1"
+          :value="color"
+          @change="(ev) => setColor(i, ev.target.value)"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <script>
+import eventListenerMixin from "../mixins/eventListenerTracker";
 const dummyValidator = {};
 dummyValidator.convert = () => dummyValidator;
 dummyValidator.check = () => dummyValidator;
@@ -92,21 +93,12 @@ const validator = (value) => new Validator(value);
 export default {
   name: "Controls",
   props: {
+    top: Number,
+    left: Number,
+    show: Boolean,
     settings: Object,
   },
-  // {
-  //   renderOnline: true,
-  //   enableRecording: false,
-  //   gamma: 2,
-  //   minFreq: 25,
-  //   maxFreq: 15000,
-  //   fftSize: 8192,
-  //   numBars: 64,
-  //   barWidth: "fit",
-  //   barPadding: 0.25,
-  //   edgePadding: 0.4,
-  //   idleHeight: 3,
-  // },
+  mixins: [eventListenerMixin],
   data: () => ({
     showSettings: false,
     gamma: "",
@@ -139,6 +131,28 @@ export default {
     },
   },
   watch: {
+    show: {
+      immediate: true,
+      handler(val) {
+        if (val) {
+          const onClick = (ev) => {
+            console.log(ev);
+            if (ev.target === null || !this.$refs.root.contains(ev.target)) {
+              this.$emit("blur", ev);
+            }
+          };
+          this.addEventListener({
+            target: document.body,
+            evtName: "click",
+            listener: onClick,
+          });
+        } else {
+          this.removeMatchingEventListeners(
+            ({ evtName }) => evtName === "click"
+          );
+        }
+      },
+    },
     gamma(val) {
       validator(val)
         .convert((s) => parseFloat(s, 10))
@@ -213,6 +227,9 @@ export default {
       this.colorList = this.settings.colorList.slice();
     });
   },
+  beforeUnmount() {
+    this.removeAllEventListeners();
+  },
 };
 </script>
 
@@ -235,34 +252,30 @@ export default {
   position: absolute;
   background: #222;
   color: white;
-  opacity: 0.6;
+  opacity: 0.8;
   transition: opacity ease-in 125ms;
   max-width: 400px;
-  margin-left: 30px;
-  margin-top: 30px;
   box-shadow: rgb(0, 0, 0) 0px 3px 5px;
   border-radius: 2px;
   overflow: hidden;
 
+  padding: 0.25rem 0.75rem 0.5rem;
+  grid: auto-flow / 1fr 1fr;
+  grid-gap: 0.5rem;
+  label {
+    display: block;
+    font-size: 0.8175rem;
+    color: rgba(255, 255, 255, 0.7);
+  }
+  input[type="text"] {
+    background: #333;
+    padding: 0.125rem 0.25rem;
+    width: 100px;
+  }
+
   &:hover,
   &:focus {
     opacity: 1;
-  }
-
-  .grid {
-    padding: 0.25rem 0.75rem 0.5rem;
-    grid: auto-flow / 1fr 1fr;
-    grid-gap: 0.5rem;
-    label {
-      display: block;
-      font-size: 0.8175rem;
-      color: rgba(255, 255, 255, 0.7);
-    }
-    input[type="text"] {
-      background: #333;
-      padding: 0.125rem 0.25rem;
-      width: 100px;
-    }
   }
 }
 .grid {

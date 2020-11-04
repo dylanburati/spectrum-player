@@ -28,10 +28,17 @@
 
 <script>
 import { rgbToHSL } from "../lib/colorConvert";
+import eventListenerMixin from "../mixins/eventListenerTracker";
 
 const buildList = (n, fn) => new Array(n).fill(0).map((_, i) => fn(i));
 export default {
   name: "Visualizer",
+  props: {
+    playState: String,
+    file: File,
+    settings: Object,
+  },
+  mixins: [eventListenerMixin],
   data: () => ({
     width: 10,
     height: 10,
@@ -47,11 +54,6 @@ export default {
     lastRenders: [],
     audioStartTime: 0,
   }),
-  props: {
-    playState: String,
-    file: Object,
-    settings: Object,
-  },
   computed: {
     isPlaying() {
       return this.playState === "playing";
@@ -87,11 +89,11 @@ export default {
         )
       );
       const hslList = rgbList.map(rgbToHSL);
-      return buildList(numBars, (i) => {
+      const gradient = buildList(numBars - 1, (i) => {
         const n = colorList.length;
-        if (n === 1) return colorList[0];
+        if (n === 1 || numBars === 1) return colorList[0];
 
-        const progress = (i * (n - 1)) / numBars;
+        const progress = (i * (n - 1)) / (numBars - 1);
         const leftIndex = Math.floor(progress);
         const pair = hslList.slice(leftIndex, leftIndex + 2);
         let hueDelta = pair[1][0] - pair[0][0];
@@ -111,13 +113,11 @@ export default {
         const h = (hue + 360) % 360;
         return `hsl(${h.toFixed(2)}, ${s.toFixed(3)}%, ${l.toFixed(3)}%)`;
       });
+      gradient.push(colorList[colorList.length - 1]);
+      return gradient;
     },
   },
   methods: {
-    doResize() {
-      this.width = this.$refs.root.clientWidth;
-      this.height = this.$refs.root.clientHeight;
-    },
     setAnalysers() {
       if (!this.context || !this.splitter) {
         return;
@@ -252,6 +252,7 @@ export default {
       } else {
         this.audio.pause();
         if (val === "stopped") {
+          this.audio.currentTime = 0;
           this.resetIndicatorData();
         }
       }
@@ -287,13 +288,21 @@ export default {
   },
   mounted() {
     this.$nextTick(() => {
-      window.addEventListener("resize", this.doResize);
-      this.doResize();
+      const onResize = () => {
+        this.width = this.$refs.root.clientWidth;
+        this.height = this.$refs.root.clientHeight;
+      };
+      this.addEventListener({
+        target: window,
+        evtName: "resize",
+        listener: onResize,
+      });
+      onResize();
     });
   },
-  unmounted() {
+  beforeUnmount() {
     if (this.audio) this.audio.src = null;
-    window.removeEventListener("resize", this.doResize);
+    this.removeAllEventListeners();
   },
 };
 </script>

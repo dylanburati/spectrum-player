@@ -1,6 +1,7 @@
 <template>
-  <span class="max-w-33">
-    <button class="btn-secondary relative mr-1">
+  <span>
+    <slot name="before"></slot>
+    <button class="btn-secondary relative mx-1">
       <slot name="default">Choose File</slot>
 
       <input
@@ -27,13 +28,8 @@ export default {
 </script>
 
 <style scoped>
-.max-w-33 {
-  max-width: 33%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: pre;
-}
-.mr-1 {
+.mx-1 {
+  margin-left: 0.25rem;
   margin-right: 0.25rem;
 }
 input[type="file"] {

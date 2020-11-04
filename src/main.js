@@ -1,4 +1,11 @@
-import { createApp } from 'vue'
-import App from './App.vue'
+import Vue from "vue";
+import App from "./App.vue";
+import Unicon from "vue-unicons";
+import { uniPlay, uniPause, uniSlidersV } from "vue-unicons/src/icons";
 
-createApp(App).mount('#app')
+Unicon.add([uniPlay, uniPause, uniSlidersV]);
+Vue.use(Unicon, { fill: "currentColor" });
+
+new Vue({
+  render: (h) => h(App),
+}).$mount("#app");

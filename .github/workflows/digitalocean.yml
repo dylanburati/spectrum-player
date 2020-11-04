@@ -1,0 +1,53 @@
+on:
+  push:
+    branches:
+      - main
+
+name: Push to DigitalOcean Droplet
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, 'skip ci')"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: '12'
+      
+      - name: Build Vue app
+        run: |
+          yarn install
+          yarn build
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Get droplet address
+        id: droplet
+        run: |
+          doctl compute droplet list --output json | \
+              jq -r '.[] | select(.name == "music-search-instance-2") | .networks.v4[0].ip_address')" | \
+              { read IP; echo "::set-output name=ipv4::$IP"; }
+
+      - name: Deploy to server
+        id: deploy
+        uses: Pendect/action-rsyncer@v1.1.0
+        env:
+          DEPLOY_KEY: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
+        with:
+          flags: '-avzr --delete'
+          options: ''
+          ssh_options: ''
+          src: 'dist/'
+          dest: 'dylan@${{ steps.droplet.outputs.ipv4 }}:/var/www/spectrum-player'
+
+      - name: Display status from deploy
+        run: echo "${{ steps.deploy.outputs.status }}"
