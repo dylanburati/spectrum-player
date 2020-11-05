@@ -238,16 +238,6 @@ export default {
 .btn-none:focus {
   outline: none;
 }
-.settings-cta {
-  span {
-    margin: 0.5rem 2rem 0.5rem 0.75rem;
-  }
-
-  button {
-    margin-left: auto;
-    padding: 0.5rem 0.75rem;
-  }
-}
 .settings {
   position: absolute;
   background: #222;
@@ -262,6 +252,8 @@ export default {
   padding: 0.25rem 0.75rem 0.5rem;
   grid: auto-flow / 1fr 1fr;
   grid-gap: 0.5rem;
+  align-items: flex-end;
+
   label {
     display: block;
     font-size: 0.8175rem;

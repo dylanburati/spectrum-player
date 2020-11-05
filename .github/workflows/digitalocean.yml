@@ -34,7 +34,7 @@ jobs:
         id: droplet
         run: |
           doctl compute droplet list --output json | \
-              jq -r '.[] | select(.name == "music-search-instance-2") | .networks.v4[0].ip_address')" | \
+              jq -r '.[] | select(.name == "music-search-instance-2") | .networks.v4[0].ip_address' | \
               { read IP; echo "::set-output name=ipv4::$IP"; }
 
       - name: Deploy to server

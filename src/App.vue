@@ -1,7 +1,7 @@
 <template>
   <div id="app">
     <div class="flex navbar">
-      <h3 class="headline cursor-default">Audio Spectrum Generator</h3>
+      <h3 class="headline cursor-default">Spectrum Player</h3>
       <span class="spacer"></span>
       <FileInput
         class="flex"
@@ -50,6 +50,15 @@
       @readystatechange="setCanPlay"
       @finished="() => (playState = 'stopped')"
     />
+    <footer>
+      <span>Copyright (c) 2020, Dylan Burati</span>
+      <a
+        href="https://github.com/dylanburati/spectrum-player"
+        target="_blank"
+        rel="noreferrer"
+        v-text="'Source code'"
+      />
+    </footer>
   </div>
 </template>
 
@@ -172,6 +181,13 @@ export default {
 .cursor-default {
   cursor: default;
 }
+a {
+  color: #2b72ab;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
 .btn,
 .btn-secondary,
 .btn-flat {
@@ -245,7 +261,6 @@ export default {
 
   .file-input-value {
     max-width: 25vw;
-    line-height: 1;
   }
 
   .btn {
@@ -259,5 +274,16 @@ export default {
 .settings-dropdown {
   align-self: stretch;
   margin: -8px 0 -8px;
+}
+footer {
+  white-space: pre-line;
+  position: fixed;
+  bottom: 0;
+  margin: 0.75rem;
+  font-size: 0.875rem;
+
+  span::after {
+    content: "\2000·\2000";
+  }
 }
 </style>

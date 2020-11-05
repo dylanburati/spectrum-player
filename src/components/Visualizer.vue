@@ -200,7 +200,7 @@ export default {
         const dt = tail ? ts - tail.timestamp : 1000 / 60;
         let audioTimestamp =
           this.context.getOutputTimestamp().contextTime - this.audioStartTime;
-        if (tail && audioTimestamp <= tail.audioTimestamp) {
+        if (tail && audioTimestamp < tail.audioTimestamp) {
           this.audioStartTime -= tail.audioTimestamp;
           audioTimestamp += tail.audioTimestamp;
         }
