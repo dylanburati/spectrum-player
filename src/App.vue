@@ -7,12 +7,16 @@
         class="flex"
         style="align-self: stretch"
         accept="audio/*"
-        @change="setFile"
+        multiple
+        @change="addFiles"
       >
         Upload
         <template v-slot:before>
-          <span class="file-input-value" v-if="file">
-            {{ file.name }}
+          <span class="file-input-value" v-if="files.length">
+            {{ files[showFileIndex].name }}
+            <span class="font-sm">{{
+              `(${showFileIndex + 1}/${files.length})`
+            }}</span>
           </span>
         </template>
         <template v-slot:after>
@@ -33,6 +37,9 @@
           width="16"
         />
       </button>
+      <button class="btn" @click="stop" :disabled="playState === 'stopped'">
+        <unicon name="square" height="16" width="16" />
+      </button>
       <button class="btn" @click="reset">Reset</button>
     </div>
     <Controls
@@ -40,11 +47,12 @@
       :top="dropdownPosition.top"
       :left="dropdownPosition.left"
       :settings="settings"
+      :seriesCount="Math.max(1, files.length)"
       @blur="onDropdownBlur"
       @change="(toMerge) => (settings = { ...settings, ...toMerge })"
     />
     <Visualizer
-      :file="file"
+      :files="files"
       :playState="playState"
       :settings="settings"
       @readystatechange="setCanPlay"
@@ -78,9 +86,10 @@ export default {
   },
   mixins: [eventListenerMixin],
   data: () => ({
-    file: null,
+    files: [],
     playState: "stopped",
     canPlay: false,
+    showFileIndex: 0,
     showSettings: false,
     dropdownPosition: {
       top: 46,
@@ -98,24 +107,28 @@ export default {
       barPadding: 0.25,
       edgePadding: 3,
       idleHeight: 3,
-      colorList: ["#7117FF", "#FF6046"],
+      colorList: [["#7117FF", "#FF6046"]],
     },
   }),
   methods: {
-    setFile(ev) {
-      this.file = Array.from(ev.target.files)[0];
+    addFiles(ev) {
+      this.files = [...this.files, ...Array.from(ev.target.files)];
     },
     play() {
       if (this.canPlay) {
         this.playState = this.playState === "playing" ? "paused" : "playing";
       }
     },
-    reset() {
+    stop() {
       this.playState = "stopped";
+    },
+    reset() {
+      this.stop();
+      this.files = [];
     },
     setCanPlay(val) {
       this.canPlay = val;
-      if (!val) this.reset();
+      if (!val) this.stop();
     },
     toggleShowSettings() {
       const next = !this.showSettings;
@@ -137,7 +150,6 @@ export default {
           ({ evtName }) => evtName === "resize"
         );
       }
-      console.log(next);
       this.showSettings = next;
     },
     onDropdownBlur(ev) {
@@ -165,6 +177,9 @@ export default {
 .flex {
   display: flex;
   align-items: center;
+}
+.flex-wrap {
+  flex-wrap: wrap;
 }
 .justify-center {
   justify-content: center;

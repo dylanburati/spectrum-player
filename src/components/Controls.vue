@@ -45,15 +45,24 @@
       <input type="text" v-model="idleHeight" />
     </div>
     <div>
-      <label>Gradient Colors</label>
-      <div class="flex">
+      <label>
+        Gradient Colors
+        <button
+          class="btn-none"
+          :disabled="colorList.length >= seriesCount"
+          @click="addColor"
+        >
+          +
+        </button>
+      </label>
+      <div class="flex flex-wrap">
         <input
-          v-for="(color, i) in colorList"
-          :key="i"
+          v-for="e in flatColors"
+          :key="e.series * 2 + e.index"
           type="color"
-          style="flex-grow: 1"
-          :value="color"
-          @change="(ev) => setColor(i, ev.target.value)"
+          style="flex-basis: 50%"
+          :value="e.color"
+          @change="(ev) => setColor(e.series, e.index, ev.target.value)"
         />
       </div>
     </div>
@@ -61,6 +70,7 @@
 </template>
 
 <script>
+import { replaceAt } from "../lib/util";
 import eventListenerMixin from "../mixins/eventListenerTracker";
 const dummyValidator = {};
 dummyValidator.convert = () => dummyValidator;
@@ -97,6 +107,7 @@ export default {
     left: Number,
     show: Boolean,
     settings: Object,
+    seriesCount: Number,
   },
   mixins: [eventListenerMixin],
   data: () => ({
@@ -112,19 +123,41 @@ export default {
     barPadding: "",
     edgePadding: "",
     idleHeight: "",
-    colorList: "",
+    colorList: [[]],
   }),
+  computed: {
+    flatColors() {
+      return this.colorList.slice(0, this.seriesCount).reduce(
+        (acc, curr, seriesIdx) => [
+          ...acc,
+          ...curr.map((c, i) => ({
+            color: c,
+            index: i,
+            series: seriesIdx,
+          })),
+        ],
+        []
+      );
+    },
+  },
   methods: {
-    setColor(index, color) {
-      if (index < 0 || index >= this.colorList) {
+    addColor() {
+      if (this.colorList.length < this.seriesCount) {
+        this.colorList = [...this.colorList, ["#AA00FF", "#005599"]];
+        this.$emit("change", { colorList: this.colorList });
+      }
+    },
+    setColor(series, index, color) {
+      if (series < 0 || series >= this.colorList) {
         return;
       }
 
       validator(color)
         .check((s) => /^#[0-9a-fA-F]{6}$/.test(s))
         .then((s) => {
-          this.colorList = this.colorList.map((prev, i) =>
-            i === index ? s : prev
+          console.log(series, index);
+          this.colorList = replaceAt(this.colorList, series, (c) =>
+            replaceAt(c, index, () => s)
           );
         })
         .then(() => this.$emit("change", { colorList: this.colorList }));
@@ -136,7 +169,6 @@ export default {
       handler(val) {
         if (val) {
           const onClick = (ev) => {
-            console.log(ev);
             if (ev.target === null || !this.$refs.root.contains(ev.target)) {
               this.$emit("blur", ev);
             }
@@ -208,7 +240,7 @@ export default {
     idleHeight(val) {
       validator(val)
         .convert((s) => parseFloat(s, 10))
-        .check((x) => !Number.isNaN(x) && x < 1000 && x > -1000)
+        .check((x) => !Number.isNaN(x) && x >= 0 && x < 1000)
         .then((x) => this.$emit("change", { idleHeight: x }));
     },
   },
