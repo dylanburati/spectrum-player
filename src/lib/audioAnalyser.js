@@ -67,7 +67,9 @@ class AudioAnalyser {
   }
 
   destroy() {
-    this.audio.src = null;
+    this.audio.src = "";
+    this.splitter.disconnect();
+    this.audio = null;
   }
 
   getWeights() {

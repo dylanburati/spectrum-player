@@ -155,7 +155,6 @@ export default {
       validator(color)
         .check((s) => /^#[0-9a-fA-F]{6}$/.test(s))
         .then((s) => {
-          console.log(series, index);
           this.colorList = replaceAt(this.colorList, series, (c) =>
             replaceAt(c, index, () => s)
           );

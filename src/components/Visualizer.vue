@@ -1,22 +1,27 @@
 <template>
   <div class="viz" ref="root">
     <svg :width="width" :height="height">
-      <g
-        v-for="(r, i) in barRects"
+      <defs>
+        <linearGradient
+          v-for="(stops, i) in pathFills"
+          :key="i"
+          :id="`gradient${i}`"
+          x1="0"
+          y1="0"
+          x2="1"
+          y2="0"
+        >
+          <stop offset="0%" :stop-color="stops[0]" stop-opacity="1" />
+          <stop offset="100%" :stop-color="stops[1]" stop-opacity="1" />
+        </linearGradient>
+      </defs>
+      <path
+        v-for="(d, i) in paths"
         :key="i"
-        :fill="barColors[r.series][r.x]"
-        :transform="`translate(${(
-          (r.x + settings.edgePadding) *
-          barWidth
-        ).toFixed(3)},0)`"
-        :width="barWidth"
-      >
-        <rect
-          :y="r.y"
-          :width="barWidth * (1 - settings.barPadding)"
-          :height="r.h"
-        />
-      </g>
+        :fill="`url(#gradient${i})`"
+        :d="d"
+        stroke-width="0"
+      />
     </svg>
     <span class="indicator" v-if="lastRenders.length">
       FPS: {{ (1000 / lastRenders[lastRenders.length - 1].took).toFixed(2) }}
@@ -28,7 +33,14 @@
 
 <script>
 import { rgbToHSL, interpHSL } from "../lib/colorConvert";
-import { buildList } from "../lib/util";
+import {
+  cubicBezierCurves,
+  line,
+  absLines,
+  reversePathComponents,
+  toPath,
+} from "../lib/curve";
+import { buildList, flatMap } from "../lib/util";
 import AudioAnalyser from "../lib/audioAnalyser";
 import eventListenerMixin from "../mixins/eventListenerTracker";
 
@@ -60,9 +72,96 @@ export default {
     isStopped() {
       return this.playState === "stopped";
     },
+    paths() {
+      const firstX = this.settings.edgePadding * this.pointSeparation;
+      const lastX =
+        (this.settings.numBars - 1 + this.settings.edgePadding) *
+        this.pointSeparation;
+      const maxY = this.height * 0.9;
+      const paths = [];
+      let prevTop = [
+        line(
+          { x: firstX, y: maxY },
+          { x: lastX, y: maxY },
+          (d) => d.x,
+          (d) => d.y
+        ),
+      ];
+      for (let specIdx = this.spectrum.length - 1; specIdx >= 0; specIdx--) {
+        const spec = this.spectrum[specIdx];
+        const top = [];
+        if (spec.length) {
+          if (spec.length >= 2) {
+            top.push(
+              ...cubicBezierCurves(
+                spec,
+                (d) => (d.x + this.settings.edgePadding) * this.pointSeparation,
+                (d) => d.y
+              )
+            );
+          } else {
+            top.push(
+              line(
+                { x: firstX, y: spec[0].y },
+                { x: lastX, y: spec[0].y },
+                (d) => d.x,
+                (d) => d.y
+              )
+            );
+          }
+          const bottom = reversePathComponents(prevTop);
+          paths.push(
+            toPath([
+              ...top,
+              line(
+                top[top.length - 1].end,
+                bottom[0].start,
+                (d) => d[0],
+                (d) => d[1]
+              ),
+              ...bottom,
+            ])
+          );
+          prevTop = top;
+        }
+      }
+      if (!paths.length) {
+        const { idleHeight } = this.settings;
+        paths.push(
+          toPath([
+            ...absLines(
+              [
+                [firstX, maxY - idleHeight],
+                [lastX, maxY - idleHeight],
+                [lastX, maxY],
+                [firstX, maxY],
+              ],
+              (d) => d[0],
+              (d) => d[1]
+            ),
+          ])
+        );
+      }
+      return paths;
+    },
+    pathFills() {
+      const colorList = this.settings.colorList.slice();
+      while (colorList.length < this.analysers.length) {
+        colorList.push(colorList[colorList.length - 1].slice().reverse());
+      }
+      return colorList;
+    },
+    pointSeparation() {
+      return (
+        this.width / (this.settings.numBars - 1 + 2 * this.settings.edgePadding)
+      );
+    },
     barRects() {
       if (!this.isStopped) {
-        return this.spectrum;
+        return flatMap(this.spectrum, (e, i) => ({
+          ...e,
+          series: i,
+        }));
       }
       return buildList(this.settings.numBars, (i) => ({
         series: 0,
@@ -117,6 +216,9 @@ export default {
         this.$emit("readystatechange", false);
         return;
       }
+      if (this.playState === "stopped") {
+        return;
+      }
       const {
         gamma,
         idleHeight,
@@ -127,16 +229,18 @@ export default {
       const additionalHeight = 0.8 * this.height - idleHeight;
       const dbRange = maxDecibels - minDecibels;
       const spectrumArr = this.analysers.map((e) => e.getSpectrum());
+      const result = this.analysers.map(() => []);
 
-      const rectArr = buildList(numBars, (i) => {
-        const acc = [];
+      for (let i = 0; i < numBars; i++) {
         let lastY = this.height * 0.9;
         let powFloor = 0;
         let dbFloor = minDecibels;
-        spectrumArr.forEach((spec, specIdx) => {
-          const idle = specIdx === 0 ? idleHeight : 0;
-          const curr = spec[i];
+        let idle = idleHeight;
+        for (let specIdx = spectrumArr.length - 1; specIdx >= 0; specIdx--) {
+          const curr = spectrumArr[specIdx][i];
           let h = idle;
+          idle = 0;
+
           if (Number.isFinite(curr)) {
             const pow = Math.pow(10, curr / 20);
             const nextDbFloor = 20 * Math.log10(powFloor + pow);
@@ -154,17 +258,11 @@ export default {
             }
             powFloor += pow;
           }
-          if (h > 0) {
-            lastY -= h;
-            acc.push({ series: specIdx, x: i, y: lastY, h });
-          }
-        });
-        return acc;
-      });
-      this.spectrum = rectArr.reduce((acc, curr) => {
-        acc.push(...curr);
-        return acc;
-      }, []);
+          lastY -= h;
+          result[specIdx].push({ x: i, y: lastY, h });
+        }
+      }
+      this.spectrum = result;
 
       if (this.isPlaying) {
         const tail =
@@ -190,7 +288,7 @@ export default {
     },
     resetIndicatorData() {
       this.lastRenders = [];
-      this.spectrum.fill(this.settings.idleHeight);
+      this.spectrum = [];
     },
     newAudioNode() {
       const audio = new Audio();
@@ -286,6 +384,7 @@ export default {
   },
   beforeUnmount() {
     this.removeAllEventListeners();
+    this.analysers.forEach((el) => el.destroy());
   },
 };
 </script>
