@@ -59,19 +59,23 @@ export function absLines(data, getX, getY) {
 const xyStr = ([x, y]) => `${x},${y}`;
 
 export function toPath(parts) {
-  const strParts = parts.map((p) => {
+  if (!parts.length) return "";
+
+  const head = `M${xyStr(parts[0].start)}`;
+  const strParts = parts.map((p, i) => {
     switch (p.kind) {
       case "C":
         return `C${xyStr(p.control1)},${xyStr(p.control2)},${xyStr(p.end)}`;
       case "L":
         return `L${xyStr(p.end)}`;
       case "M":
+        if (i === 0) return "";
         return `M${xyStr(p.end)}`;
       default:
         throw new Error("Unknown path component type " + p.kind);
     }
   });
-  return strParts.join("") + "Z";
+  return head + strParts.join("") + "Z";
 }
 
 export function reversePathComponents(parts) {

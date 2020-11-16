@@ -52,3 +52,8 @@ export function interpHSL(alpha, c1, c2) {
   const h = (hue + 360) % 360;
   return [h, s, l];
 }
+
+export const parseRGB = (e) =>
+  [e.substring(1, 3), e.substring(3, 5), e.substring(5)].map((s) =>
+    parseInt(s, 16)
+  );
