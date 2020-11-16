@@ -1,9 +1,14 @@
 import Vue from "vue";
 import App from "./App.vue";
 import Unicon from "vue-unicons";
-import { uniPlay, uniPause, uniSlidersV } from "vue-unicons/src/icons";
+import {
+  uniPlay,
+  uniPause,
+  uniSquare,
+  uniSlidersV,
+} from "vue-unicons/src/icons";
 
-Unicon.add([uniPlay, uniPause, uniSlidersV]);
+Unicon.add([uniPlay, uniPause, uniSquare, uniSlidersV]);
 Vue.use(Unicon, { fill: "currentColor" });
 
 new Vue({

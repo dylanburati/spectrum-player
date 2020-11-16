@@ -38,3 +38,22 @@ export function rgbToHSL(rgb) {
 
   return [h, s * 100, l * 100];
 }
+
+export function interpHSL(alpha, c1, c2) {
+  let hueDelta = c2[0] - c1[0];
+  const altHueDelta =
+    hueDelta > 0 ? c2[0] - (c1[0] + 360) : c2[0] + 360 - c1[0];
+  if (Math.abs(altHueDelta) < Math.abs(hueDelta)) {
+    hueDelta = altHueDelta;
+  }
+
+  const [s, l] = [1, 2].map((j) => c1[j] * (1 - alpha) + c2[j] * alpha);
+  const hue = c1[0] + alpha * hueDelta;
+  const h = (hue + 360) % 360;
+  return [h, s, l];
+}
+
+export const parseRGB = (e) =>
+  [e.substring(1, 3), e.substring(3, 5), e.substring(5)].map((s) =>
+    parseInt(s, 16)
+  );
