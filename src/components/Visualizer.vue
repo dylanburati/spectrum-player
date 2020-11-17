@@ -47,6 +47,7 @@
 <script>
 import { parseRGB, rgbToHSL } from "../lib/colorConvert";
 import AudioAnalyser from "../lib/audioAnalyser";
+import { buildList } from "../lib/util";
 import eventListenerMixin from "../mixins/eventListenerTracker";
 import AreaGroup from "./AreaGroup.vue";
 import BarGroup from "./BarGroup.vue";
@@ -69,6 +70,7 @@ export default {
     spectrum: [],
     loading: new Set(),
     idCounter: 0,
+    context: new AudioContext(),
     analysers: [],
     lastRenders: [],
     audioStartTime: 0,
@@ -168,8 +170,7 @@ export default {
           this.lastRenders.length &&
           this.lastRenders[this.lastRenders.length - 1];
         const dt = tail ? ts - tail.timestamp : 1000 / 60;
-        let audioTimestamp =
-          this.analysers[0].getTimestamp() - this.audioStartTime;
+        let audioTimestamp = this.context.currentTime - this.audioStartTime;
         if (tail && audioTimestamp < tail.audioTimestamp) {
           this.audioStartTime -= tail.audioTimestamp;
           audioTimestamp += tail.audioTimestamp;
@@ -189,13 +190,6 @@ export default {
       this.lastRenders = [];
       this.spectrum = [];
     },
-    newAudioNode() {
-      const audio = new Audio();
-      audio.loop = false;
-      audio.autoplay = false;
-      audio.crossOrigin = "anonymous";
-      return audio;
-    },
   },
   watch: {
     files: {
@@ -205,41 +199,51 @@ export default {
         if (val.length === prev.length && val.every((e, i) => e === prev[i])) {
           return;
         }
+        if (val.length && this.idCounter === 0) {
+          this.context.resume();
+        }
         this.$emit("readystatechange", false);
         this.resetIndicatorData();
         while (val.length < this.analysers.length) {
           const analyser = this.analysers.pop();
           analyser.destroy();
         }
-        while (val.length > this.analysers.length) {
-          const audio = this.newAudioNode();
-          const id = this.idCounter;
-          this.idCounter++;
-
-          audio.addEventListener("canplay", () => {
-            this.loading.delete(id);
-            if (this.loading.size === 0 && this.analysers.length) {
-              this.$emit("readystatechange", true);
-            }
-          });
-          audio.addEventListener("ended", () => {
-            this.$emit("finished");
-          });
-          const analyser = new AudioAnalyser(id, audio, { ...this.settings });
-          this.analysers.push(analyser);
+        const changes = buildList(Math.max(prev.length, val.length), (i) => ({
+          prevFile: i < prev.length ? prev[i] : null,
+          file: i < val.length ? val[i] : null,
+          analyser: i < this.analysers.length ? this.analysers[i] : null,
+        }));
+        while (changes.length < this.analysers.length) {
+          const analyser = this.analysers.pop();
+          analyser.destroy();
         }
-        val.forEach((file, i) => {
-          const prevFile = i < prev.length ? prev[i] : null;
-          if (file !== prevFile) {
-            const analyser = this.analysers[i];
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              analyser.setSource(ev.target.result);
-            };
-            this.loading.add(analyser.id);
-            reader.readAsDataURL(file);
+        const nextAnalysers = changes.map(({ prevFile, file, analyser }) => {
+          if (analyser && prevFile !== file) {
+            analyser.destroy();
           }
+          if (file && file !== prevFile) {
+            const id = this.idCounter;
+            this.idCounter++;
+
+            const nxt = new AudioAnalyser(id, this.context, file, {
+              ...this.settings,
+            });
+
+            this.loading.add(id);
+            return nxt
+              .onLoad(() => {
+                this.loading.delete(id);
+                if (this.loading.size === 0 && this.analysers.length) {
+                  this.$emit("readystatechange", true);
+                }
+              })
+              .onEnded(() => {
+                this.$emit("finished");
+              });
+          }
+          return analyser;
         });
+        this.analysers = nextAnalysers.filter((e) => e !== null);
       },
     },
     playState(val, prev) {
@@ -251,7 +255,7 @@ export default {
           this.$emit("readystatechange", false);
           return;
         }
-        this.audioStartTime = this.analysers[0].getTimestamp();
+        this.audioStartTime = this.context.currentTime;
         this.analysers.forEach((el) => el.play());
         requestAnimationFrame((ts) => this.calculateBarHeights(ts));
       } else if (val === "paused") {

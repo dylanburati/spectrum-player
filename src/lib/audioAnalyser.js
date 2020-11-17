@@ -3,16 +3,21 @@ const { buildList } = require("./util");
 class AudioAnalyser {
   weightsCache = new Map();
 
-  constructor(id, audio, options) {
+  constructor(id, context, file, options) {
     this.id = id;
-    this.audio = audio;
+    this.context = context;
     this.options = options;
+    this.isCancelled = false;
+    this.startTime = 0;
+    this.lastOffset = 0;
+    this.sourceState = 0;
+    this.loadCallback = () => {};
+    this.endCallback = () => {};
 
     this.context = new AudioContext();
     this.splitter = this.context.createChannelSplitter();
-    const source = this.context.createMediaElementSource(this.audio);
-    source.connect(this.splitter);
     this.splitter.connect(this.context.destination);
+    this.replaceSource();
 
     const { fftSize, minDecibels, maxDecibels } = options;
     this.analyserL = this.context.createAnalyser();
@@ -30,6 +35,15 @@ class AudioAnalyser {
 
     this.audioBufferL = new Float32Array(fftSize / 2);
     this.audioBufferR = new Float32Array(fftSize / 2);
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      if (this.isCancelled) return;
+      const buffer = await this.context.decodeAudioData(ev.target.result);
+      this.source.buffer = buffer;
+      if (!this.isCancelled && this.loadCallback) this.loadCallback();
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   setOptions(next) {
@@ -48,28 +62,71 @@ class AudioAnalyser {
     this.options = next;
   }
 
-  setSource(src) {
-    this.audio.src = src;
-    this.audio.load();
+  onLoad(listener) {
+    this.loadCallback = listener;
+    return this;
   }
 
-  play() {
-    this.audio.play();
+  onEnded(listener) {
+    this.endCallback = listener;
+    return this;
+  }
+
+  startSource(when, offset) {
+    if (this.sourceState === 1) return false;
+    if (this.sourceState === 2) {
+      this.replaceSource();
+    }
+    this.source.start(when, offset);
+    this.sourceState = 1;
+    return true;
+  }
+
+  stopSource(when) {
+    if (this.sourceState === 0) return false;
+    this.source.stop(when);
+    this.sourceState = 2;
+    return true;
+  }
+
+  play(when) {
+    if (this.startSource(when, this.lastOffset)) {
+      this.startTime = when || this.context.currentTime;
+    }
   }
 
   pause() {
-    this.audio.pause();
+    if (this.stopSource()) {
+      this.lastOffset += this.context.currentTime - this.startTime;
+    }
   }
 
   stop() {
-    this.audio.pause();
-    this.audio.currentTime = 0;
+    if (this.stopSource()) {
+      this.lastOffset = 0;
+    }
+  }
+
+  replaceSource() {
+    let buffer;
+    if (this.source) {
+      buffer = this.source.buffer;
+      this.source.disconnect(this.splitter);
+    }
+    this.source = this.context.createBufferSource();
+    this.source.connect(this.splitter);
+    this.source.onended = () => {
+      if (this.sourceState === 1 && this.endCallback) this.endCallback();
+    };
+    if (buffer) {
+      this.source.buffer = buffer;
+    }
   }
 
   destroy() {
-    this.audio.src = "";
+    this.isCancelled = true;
+    this.stopSource();
     this.splitter.disconnect();
-    this.audio = null;
   }
 
   getWeights() {
